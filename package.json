@@ -1,0 +1,170 @@
+{
+  "name": "coding-agent-monitor",
+  "displayName": "Coding Agent Monitor",
+  "description": "Track token usage, cost, and plan-quota status across Claude Code, Codex CLI, Gemini CLI, GitHub Copilot, Cursor, and custom AI coding agents — all in one VSCode pane.",
+  "version": "0.1.0",
+  "publisher": "coding-agent-monitor",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=20.0.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "keywords": [
+    "claude",
+    "codex",
+    "gemini",
+    "copilot",
+    "cursor",
+    "tokens",
+    "usage",
+    "cost",
+    "ai",
+    "agent"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codingAgentMonitor",
+          "title": "Coding Agent Monitor",
+          "icon": "assets/activity-bar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codingAgentMonitor": [
+        {
+          "type": "webview",
+          "id": "codingAgentMonitor.dashboard",
+          "name": "Dashboard"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "codingAgentMonitor.openDashboard",
+        "title": "Coding Agent Monitor: Open Dashboard"
+      },
+      {
+        "command": "codingAgentMonitor.refreshNow",
+        "title": "Coding Agent Monitor: Refresh Now"
+      },
+      {
+        "command": "codingAgentMonitor.launchAgent",
+        "title": "Coding Agent Monitor: Launch Agent…"
+      },
+      {
+        "command": "codingAgentMonitor.setQuotas",
+        "title": "Coding Agent Monitor: Set Quota Caps…"
+      },
+      {
+        "command": "codingAgentMonitor.exportUsage",
+        "title": "Coding Agent Monitor: Export Usage…"
+      },
+      {
+        "command": "codingAgentMonitor.importUsage",
+        "title": "Coding Agent Monitor: Import Usage…"
+      },
+      {
+        "command": "codingAgentMonitor.updatePricing",
+        "title": "Coding Agent Monitor: Update Pricing Table"
+      },
+      {
+        "command": "codingAgentMonitor.addCustomAgent",
+        "title": "Coding Agent Monitor: Add Custom Agent…"
+      }
+    ],
+    "configuration": {
+      "title": "Coding Agent Monitor",
+      "properties": {
+        "codingAgentMonitor.pollIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 15,
+          "maximum": 3600,
+          "description": "How often (in seconds) to poll agent log directories for new usage events."
+        },
+        "codingAgentMonitor.retentionDays": {
+          "type": "number",
+          "default": 365,
+          "minimum": 7,
+          "description": "How many days of raw event data to retain before rolling up into daily aggregates."
+        },
+        "codingAgentMonitor.cursor.experimentalLocalRead": {
+          "type": "boolean",
+          "default": false,
+          "description": "(Experimental) Attempt to read Cursor usage from its local SQLite store. May break on Cursor updates."
+        },
+        "codingAgentMonitor.quotas": {
+          "type": "object",
+          "default": {},
+          "description": "User-configured plan-quota caps for providers that don't expose a usage API. See README for schema.",
+          "additionalProperties": true
+        },
+        "codingAgentMonitor.customAgents": {
+          "type": "array",
+          "default": [],
+          "description": "Manifest paths or inline manifests for custom coding agents. See §6.7 of DESIGN.md.",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "npm run build:host && npm run build:webview",
+    "build:host": "node esbuild.config.mjs",
+    "build:webview": "vite build",
+    "watch": "concurrently \"npm:watch:*\"",
+    "watch:host": "node esbuild.config.mjs --watch",
+    "watch:webview": "vite build --watch",
+    "typecheck": "tsc -p tsconfig.host.json --noEmit && tsc -p webview-src/tsconfig.json --noEmit",
+    "lint": "eslint \"src/**/*.ts\" \"webview-src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.ts\" \"webview-src/**/*.{ts,tsx,css}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "package": "npm run build && vsce package --no-dependencies",
+    "publish": "vsce publish --no-dependencies"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.9.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.0",
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@types/vscode": "^1.90.0",
+    "@typescript-eslint/eslint-plugin": "^7.13.0",
+    "@typescript-eslint/parser": "^7.13.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "@vscode/vsce": "^2.27.0",
+    "autoprefixer": "^10.4.19",
+    "clsx": "^2.1.1",
+    "concurrently": "^8.2.2",
+    "electron": "^30.0.0",
+    "esbuild": "^0.21.4",
+    "eslint": "^8.57.0",
+    "lucide-react": "^0.395.0",
+    "postcss": "^8.4.38",
+    "prettier": "^3.3.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwind-merge": "^2.3.0",
+    "tailwindcss": "^3.4.4",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.13",
+    "vitest": "^1.6.0"
+  }
+}
