@@ -1,117 +1,110 @@
-# Coding Agent Monitor
+# agent-tab
 
-> A unified VSCode pane for token usage, cost, and plan-quota status across **Claude Code**, **Codex CLI**, **Gemini CLI**, **GitHub Copilot**, **Cursor**, and custom AI coding agents.
+> A tiny CLI that prints today's token usage and cost for your AI coding agent — designed to slot into Claude Code's `statusLine` so the number sits right above your prompt input.
 
-**Status:** v0.1 — phase 1 scaffold (extension shell, store, sidebar empty state, status bar, command skeletons). Collectors land in phases 2–7. See [`DESIGN.md`](./DESIGN.md) for the full design and [`DESIGN.md` §15](./DESIGN.md) for the phase plan.
+```
+[claude] session $0.08 · today $0.42 · 12.3k tok · claude-sonnet-4-6
+```
+
+Supports **Claude Code**, **Codex CLI**, and **Gemini CLI**. You pick one active agent at a time; switch with `agent-tab use <agent>`.
 
 ---
 
-## Why this exists
+## Why
 
-Modern developers juggle multiple AI coding agents simultaneously. Each has its own pricing, plan limits, account, and dashboard. This extension answers four questions in one place:
+Token bills for AI coding agents are easy to lose track of — three CLIs, three dashboards, three accounts. `agent-tab` reads the on-disk session logs each agent already writes, computes today's cost locally, and shows it where you'll actually see it: above the prompt in Claude Code.
 
-1. **How many tokens did I burn today / this week / this month**, per agent and per model?
-2. **How much did that cost** (or how much of my plan have I used)?
-3. **Which account/email** did each session run under?
-4. **Am I close to a rate limit or quota cap?**
+No daemon, no database, no telemetry, no network calls. One short-lived CLI run per statusLine refresh.
 
-Plus quality-of-life: switch active model per agent, switch active account profile, plug in custom agents, and reduce token spend via [graphify](https://github.com/safishamsi/graphify)-based code context.
+## Install
 
-## Highlights
-
-- **Local-first.** All data stays on your disk in a SQLite store under VSCode's globalStorage. Zero outbound telemetry.
-- **Multi-account.** Each event is tagged with the account/email that produced it. Profile picker switches the active credential set when launching agents.
-- **Cross-machine aware.** Detects if your agent data dirs are synced via Dropbox / iCloud / OneDrive / Syncthing / Nextcloud and dedupes accordingly.
-- **Theme-aware UI.** React + Tailwind webview maps to VSCode's CSS variables — looks native in any theme.
-- **Production-grade.** Schema migrations from day one, WAL-mode SQLite, refuses to run on a sync-rooted globalStorage to prevent corruption.
-
-## Quickstart (development)
-
-Prereqs: Node 20+, VSCode 1.90+, native build tools (`xcode-select --install` on macOS / `build-essential` on Linux / Visual Studio Build Tools on Windows) for `better-sqlite3`.
+Prereqs: Node 20+.
 
 ```bash
-git init                       # not yet a git repo
+git clone https://github.com/srikar0805/agent-tab.git
+cd agent-tab
 npm install
-npm run rebuild                # rebuild better-sqlite3 against your VSCode's Electron
-npm run build                  # build extension host + webview into dist/
+npm run build
+npm link              # makes `agent-tab` available on PATH
 ```
 
-Then open the project in VSCode and press **F5** to launch a development host with the extension loaded. The status-bar item appears bottom-right; the sidebar lives behind the activity-bar icon.
-
-### Running tests
+Verify:
 
 ```bash
-npm test               # one-shot
-npm run test:watch     # watch mode
-npm run typecheck      # tsc --noEmit on host + webview
-npm run lint           # eslint
+agent-tab --version
+agent-tab status      # prints today's usage for the active agent
 ```
 
-### Packaging a VSIX
+## Wire into Claude Code's statusLine
 
-```bash
-npm run package        # produces coding-agent-monitor-0.1.0.vsix
-code --install-extension coding-agent-monitor-0.1.0.vsix
+Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "agent-tab"
+  }
+}
 ```
 
-## Project layout
+Reload Claude Code (or just start a new session). You'll see the tab appear above the prompt and refresh after each assistant turn.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `agent-tab` *(no args)* | Prints the active agent's usage line. This is the form Claude Code calls. |
+| `agent-tab status [--provider=<agent>] [--no-color]` | Same as above, with one-shot overrides. |
+| `agent-tab use <claude\|codex\|gemini>` | Persistently sets the active agent. |
+| `agent-tab show` | Prints the active agent. |
+| `agent-tab --help` / `--version` | Usage / version. |
+
+The active agent is stored in `$XDG_CONFIG_HOME/agent-tab/config.json` (`~/.config/agent-tab/config.json` on macOS/Linux).
+
+## What each provider reads
+
+| Agent | Source | Notes |
+| --- | --- | --- |
+| Claude Code | `~/.claude/projects/*/*.jsonl` | Sums today's `assistant.message.usage` across all projects. Session window scoped to `transcript_path` from stdin when invoked by statusLine. Honors `CLAUDE_CONFIG_DIR`. |
+| Codex CLI | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | Codex emits **cumulative** `token_count` events per session — `agent-tab` diffs them to derive per-turn deltas. Session window = most-recently-modified rollout of the day. Honors `CODEX_HOME`. |
+| Gemini CLI | `~/.gemini/telemetry.log` | OpenTelemetry log of `gemini_cli.api_response` events. **Requires telemetry to be enabled** (`telemetry.target = "local"` in `~/.gemini/settings.json`); otherwise the CLI reports `telemetry not enabled` instead of zero. Honors `GEMINI_HOME`. |
+
+Pricing for known models is in [`assets/pricing.json`](assets/pricing.json). Unknown models contribute zero cost (you'll still see the token count and the model name in the output) — open a PR to add new entries.
+
+## Layout
 
 ```
-src/                  Extension host (TypeScript, esbuild → dist/extension.js)
-  extension.ts        Activation entry
-  platform/paths.ts   Cross-platform agent-data path resolvers + sync-marker list
-  store/              SQLite store, migrations, dashboard queries
-  collectors/         Collector interface + manager (concrete collectors land in phase 2+)
-  ui/                 Status bar + sidebar WebviewViewProvider
-  commands/           Command palette handlers
-
-webview-src/          Sidebar UI (React + Tailwind, vite → dist/webview/)
-  App.tsx             Top-level component
-  components/         EmptyState, Header, TotalsBar, primitives
-  lib/vscode.ts       Typed postMessage bus
-
+src/
+  cli.ts                   Entry: argv router, stdin reader
+  config.ts                Read/write the active-agent config
+  pricing.ts               Load pricing.json, lookup by name/alias, compute cost
+  format.ts                Build the statusLine output (with ANSI colors)
+  time.ts                  startOfTodayMs / todayDateParts helpers
+  providers/
+    types.ts               Provider interface, AgentSnapshot, StatusContext
+    index.ts               Name → instance registry
+    claude.ts              Claude Code JSONL parser
+    codex.ts               Codex JSONL parser (cumulative-diff aware)
+    gemini.ts              Gemini telemetry parser
+test/
+  *.test.ts                vitest unit tests (no fixtures on disk — tests synthesize them)
 assets/
-  pricing.json        Local pricing table (refreshable via command)
-  activity-bar-icon.svg
-
-test/                 Vitest unit tests
-.github/workflows/    CI matrix (linux/mac/windows) + tagged-release VSIX artifact
+  pricing.json             Per-model $/M-token rates with aliases
 ```
 
-## Roadmap
-
-See [`DESIGN.md` §15](./DESIGN.md). Highlights:
-
-- **Phase 1 (this scaffold).** Extension shell, store, sidebar empty state, status bar, command skeletons. ✅
-- **Phase 2.** Claude Code collector — full E2E parsing of `~/.claude/projects/**/*.jsonl`.
-- **Phase 3.** Codex + Gemini collectors via shared JSONL reader.
-- **Phase 4.** MCP tool-use facet (parse `mcp__*` tool calls from host JSONLs).
-- **Phase 5.** GitHub Copilot via `/user/copilot/billing`.
-- **Phase 6.** Profile model + tagging across all providers.
-- **Phase 7.** Cursor stub + experimental SQLite read.
-- **Phase 8.** MCP standalone-server collector.
-- **Phase 9.** Custom-agent plugin loader.
-- **Phase 10.** Active profile switching (`buildLaunchSpec`) + Launch Agent quick-pick.
-- **Phase 11.** Graphify integration (sidebar Graph Context card + per-agent MCP wiring).
-- **Phase 12.** Quota caps + Issues tab.
-- **Phase 13.** Pricing updater + Export/Import (CSV/JSON) + sync-root detection banner.
-- **Phase 14.** Polish, packaging, marketplace listing.
+Build is plain `tsc` → `dist/`. Zero runtime dependencies.
 
 ## Privacy
 
-- Zero outbound telemetry.
-- Optional Anthropic / OpenAI Admin API integrations require explicit opt-in; keys live in VSCode's `SecretStorage`.
-- Reading agent credential files is read-only; bearer tokens are never copied into our SQLite.
+- All processing is local. The CLI reads files under your home directory and prints to stdout. It makes no network calls and writes no state outside `$XDG_CONFIG_HOME/agent-tab/config.json`.
+- The stdin payload from Claude Code's statusLine (`session_id`, `transcript_path`, etc.) is consumed in memory and never persisted.
 
-## Configuration
+## Limitations
 
-| Setting | Default | Purpose |
-| --- | --- | --- |
-| `codingAgentMonitor.pollIntervalSeconds` | `60` | How often to scan agent log directories. |
-| `codingAgentMonitor.retentionDays` | `365` | Days of raw event data before rolling up to daily aggregates. |
-| `codingAgentMonitor.cursor.experimentalLocalRead` | `false` | (Experimental) Read Cursor's local SQLite — may break on Cursor updates. |
-| `codingAgentMonitor.quotas` | `{}` | User-configured plan-quota caps (for Pro/Max plans without an API). |
-| `codingAgentMonitor.customAgents` | `[]` | Manifest paths for custom agents. See `DESIGN.md` §6.7. |
+- **Only Claude Code has a true statusLine.** Codex CLI and Gemini CLI have hooks but neither renders custom output above the prompt. You can still see their numbers via `agent-tab use codex && agent-tab` or by integrating with a shell prompt (starship, oh-my-zsh, etc.).
+- **Gemini requires telemetry to be enabled.** Without it, there's no on-disk token data.
+- **Models without pricing show $0.00.** The bundled pricing table doesn't cover every model — particularly fast-moving Codex/OpenAI variants. Token counts are still accurate.
 
 ## License
 
