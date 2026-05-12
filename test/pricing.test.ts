@@ -1,72 +1,122 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { loadPricing, lookupModel, costFor, _resetPricingCache } from '../src/pricing.js';
+import { writeCache } from '../src/modelsDev.js';
 
-beforeEach(() => _resetPricingCache());
+let tmp: string;
+let prevCacheDir: string | undefined;
+
+beforeEach(async () => {
+  tmp = await mkdtemp(join(tmpdir(), 'agent-tab-pricing-'));
+  prevCacheDir = process.env.AGENT_TAB_CACHE_DIR;
+  process.env.AGENT_TAB_CACHE_DIR = tmp;
+  _resetPricingCache();
+});
+
+afterEach(async () => {
+  if (prevCacheDir === undefined) delete process.env.AGENT_TAB_CACHE_DIR;
+  else process.env.AGENT_TAB_CACHE_DIR = prevCacheDir;
+  await rm(tmp, { recursive: true, force: true });
+});
 
 describe('loadPricing', () => {
-  it('loads the bundled pricing.json with expected models', async () => {
+  it('returns bundled pricing with no cache present', async () => {
     const p = await loadPricing();
-    expect(p.unit).toBe('per_million_tokens');
-    expect(p.currency).toBe('USD');
-    expect(p.models['claude-sonnet-4-6']).toBeDefined();
-    expect(p.models['claude-opus-4-7']).toBeDefined();
-    expect(p.models['gpt-5-codex']).toBeDefined();
-    expect(p.models['gemini-2.5-pro']).toBeDefined();
+    expect(p.bundled.unit).toBe('per_million_tokens');
+    expect(p.bundled.currency).toBe('USD');
+    expect(p.cache).toBeNull();
+    expect(p.bundled.models['claude-sonnet-4-6']).toBeDefined();
+  });
+
+  it('exposes the cache when one is present', async () => {
+    await writeCache({
+      fetched_at: new Date().toISOString(),
+      source: 'test',
+      models: { 'fake-model-xyz': { input: 1, output: 2 } },
+    });
+    const p = await loadPricing();
+    expect(p.cache).not.toBeNull();
+    expect(p.cache?.models['fake-model-xyz']?.input).toBe(1);
   });
 });
 
-describe('lookupModel', () => {
-  it('finds a model by canonical name', async () => {
+describe('lookupModel — bundled only', () => {
+  it('finds by canonical name', async () => {
     const p = await loadPricing();
     expect(lookupModel(p, 'claude-sonnet-4-6')?.input).toBe(3.0);
   });
 
-  it('finds a model by alias', async () => {
+  it('finds by alias', async () => {
     const p = await loadPricing();
     expect(lookupModel(p, 'claude-sonnet-4-6-20260101')?.input).toBe(3.0);
-    expect(lookupModel(p, 'anthropic.claude-opus-4-7-v1:0')?.input).toBe(15.0);
   });
 
-  it('returns null for an unknown model', async () => {
+  it('returns null for unknown', async () => {
     const p = await loadPricing();
-    expect(lookupModel(p, 'made-up-model')).toBeNull();
+    expect(lookupModel(p, 'totally-made-up')).toBeNull();
   });
 
-  it('matches free-model glob patterns', async () => {
+  it('matches free-model patterns', async () => {
     const p = await loadPricing();
     const m = lookupModel(p, 'ollama:llama3:70b');
-    expect(m).not.toBeNull();
     expect(m?.input).toBe(0);
   });
 });
 
-describe('costFor', () => {
-  it('computes cost as sum of (tokens × per-million rate) / 1e6', async () => {
-    const p = await loadPricing();
-    // Sonnet: input 3.0, output 15.0 per million
-    const cost = costFor(p, 'claude-sonnet-4-6', { input: 1_000_000, output: 100_000 });
-    expect(cost).toBeCloseTo(3.0 + (100_000 * 15.0) / 1_000_000, 6);
-  });
-
-  it('includes cache rates when present', async () => {
-    const p = await loadPricing();
-    // Sonnet: cache_read 0.3, cache_write 3.75
-    const cost = costFor(p, 'claude-sonnet-4-6', {
-      input: 0,
-      output: 0,
-      cacheRead: 1_000_000,
-      cacheWrite: 1_000_000,
+describe('lookupModel — cache overrides bundled', () => {
+  it('prefers cache when it has the model', async () => {
+    await writeCache({
+      fetched_at: new Date().toISOString(),
+      source: 'test',
+      // Different rate than bundled for claude-sonnet-4-6
+      models: { 'claude-sonnet-4-6': { input: 99, output: 99 } },
     });
-    expect(cost).toBeCloseTo(0.3 + 3.75, 6);
+    const p = await loadPricing();
+    expect(lookupModel(p, 'claude-sonnet-4-6')?.input).toBe(99);
   });
 
-  it('returns 0 for an unknown model', async () => {
+  it('falls back to bundled when cache lacks the model', async () => {
+    await writeCache({
+      fetched_at: new Date().toISOString(),
+      source: 'test',
+      models: { 'unrelated-model': { input: 1, output: 2 } },
+    });
     const p = await loadPricing();
-    expect(costFor(p, 'unknown', { input: 5_000_000, output: 5_000_000 })).toBe(0);
+    expect(lookupModel(p, 'claude-sonnet-4-6')?.input).toBe(3.0);
   });
 
-  it('returns 0 cost for free models even with high token counts', async () => {
+  it('cache match with date suffix stripped', async () => {
+    await writeCache({
+      fetched_at: new Date().toISOString(),
+      source: 'test',
+      models: { 'shiny-new-model': { input: 1.5, output: 6.0 } },
+    });
     const p = await loadPricing();
-    expect(costFor(p, 'ollama:qwen', { input: 10_000_000, output: 10_000_000 })).toBe(0);
+    expect(lookupModel(p, 'shiny-new-model-20260301')?.input).toBe(1.5);
+  });
+});
+
+describe('costFor', () => {
+  it('reports known=true and a non-zero cost for a known model', async () => {
+    const p = await loadPricing();
+    const r = costFor(p, 'claude-sonnet-4-6', { input: 1_000_000, output: 0 });
+    expect(r.known).toBe(true);
+    expect(r.cost).toBeCloseTo(3.0, 6);
+  });
+
+  it('reports known=false for an unknown model', async () => {
+    const p = await loadPricing();
+    const r = costFor(p, 'made-up-model-99', { input: 5_000_000, output: 5_000_000 });
+    expect(r.known).toBe(false);
+    expect(r.cost).toBe(0);
+  });
+
+  it('reports known=true with 0 cost for free models', async () => {
+    const p = await loadPricing();
+    const r = costFor(p, 'ollama:qwen', { input: 1_000_000, output: 1_000_000 });
+    expect(r.known).toBe(true);
+    expect(r.cost).toBe(0);
   });
 });

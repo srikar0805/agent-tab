@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { formatSnapshot, formatCost, formatTokens } from '../src/format.js';
-import { emptyWindow, type AgentSnapshot } from '../src/providers/types.js';
+import { formatSnapshot, formatCost, formatTokens, formatWindowCost } from '../src/format.js';
+import { emptyWindow, type AgentSnapshot, type UsageWindow } from '../src/providers/types.js';
 
 function snap(overrides: Partial<AgentSnapshot> = {}): AgentSnapshot {
   return {
@@ -35,6 +35,32 @@ describe('formatSnapshot (no color)', () => {
     const out = formatSnapshot(s, { color: false });
     expect(out).toBe('[claude] today $0.00 · 0 tok');
   });
+
+  it("renders '$?' when pricing is unknown and tokens > 0", () => {
+    const w: UsageWindow = {
+      ...emptyWindow(),
+      costUsd: 0,
+      inputTokens: 100_000,
+      outputTokens: 50_000,
+      unknownPricing: true,
+      primaryModel: 'mystery-model',
+    };
+    const out = formatSnapshot({ agent: 'codex', today: w }, { color: false });
+    expect(out).toBe('[codex] today $? · 150.0k tok · mystery-model');
+  });
+
+  it("renders '$X.XX+?' when partial pricing is known and partial is unknown", () => {
+    const w: UsageWindow = {
+      ...emptyWindow(),
+      costUsd: 0.42,
+      inputTokens: 100_000,
+      outputTokens: 50_000,
+      unknownPricing: true,
+      primaryModel: 'mixed',
+    };
+    const out = formatSnapshot({ agent: 'codex', today: w }, { color: false });
+    expect(out).toBe('[codex] today $0.42+? · 150.0k tok · mixed');
+  });
 });
 
 describe('formatSnapshot (color)', () => {
@@ -42,6 +68,29 @@ describe('formatSnapshot (color)', () => {
     const out = formatSnapshot(snap(), { color: true });
     expect(out).toContain('\x1b[');
     expect(out).toContain('claude');
+  });
+});
+
+describe('formatWindowCost', () => {
+  it('returns $0.00 for a clean idle window', () => {
+    expect(formatWindowCost(emptyWindow())).toBe('$0.00');
+  });
+
+  it('returns $? when tokens > 0 and unknownPricing && cost == 0', () => {
+    expect(
+      formatWindowCost({ ...emptyWindow(), inputTokens: 100, unknownPricing: true }),
+    ).toBe('$?');
+  });
+
+  it('returns $X+? when tokens > 0, unknownPricing, and partial cost', () => {
+    expect(
+      formatWindowCost({
+        ...emptyWindow(),
+        inputTokens: 100,
+        costUsd: 0.5,
+        unknownPricing: true,
+      }),
+    ).toBe('$0.50+?');
   });
 });
 

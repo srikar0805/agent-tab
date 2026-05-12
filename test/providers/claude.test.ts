@@ -7,17 +7,22 @@ import { _resetPricingCache } from '../../src/pricing.js';
 
 let tmp: string;
 let prevDir: string | undefined;
+let prevCacheDir: string | undefined;
 
 beforeEach(async () => {
   tmp = await mkdtemp(join(tmpdir(), 'agent-tab-claude-'));
   prevDir = process.env.CLAUDE_CONFIG_DIR;
+  prevCacheDir = process.env.AGENT_TAB_CACHE_DIR;
   process.env.CLAUDE_CONFIG_DIR = tmp;
+  process.env.AGENT_TAB_CACHE_DIR = join(tmp, '.cache');
   _resetPricingCache();
 });
 
 afterEach(async () => {
   if (prevDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
   else process.env.CLAUDE_CONFIG_DIR = prevDir;
+  if (prevCacheDir === undefined) delete process.env.AGENT_TAB_CACHE_DIR;
+  else process.env.AGENT_TAB_CACHE_DIR = prevCacheDir;
   await rm(tmp, { recursive: true, force: true });
 });
 

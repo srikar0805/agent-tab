@@ -12,6 +12,8 @@ export interface UsageWindow {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   primaryModel?: string;
+  /** True if any model contributing to this window had no pricing entry. */
+  unknownPricing?: boolean;
 }
 
 export interface AgentSnapshot {
@@ -39,5 +41,6 @@ export function emptyWindow(): UsageWindow {
     outputTokens: 0,
     cacheReadTokens: 0,
     cacheWriteTokens: 0,
+    unknownPricing: false,
   };
 }

@@ -1,6 +1,6 @@
 {
   "name": "agent-tab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI that prints today's token usage and cost across Claude Code, Codex CLI, and Gemini CLI. Designed to wire into Claude Code's statusLine so the active agent's tab shows above your prompt.",
   "license": "MIT",
   "type": "module",

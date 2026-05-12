@@ -27,9 +27,9 @@ export function formatSnapshot(snap: AgentSnapshot, opts: FormatOptions = {}): s
   const parts: string[] = [];
 
   if (snap.session) {
-    parts.push(`session ${c.bold}${formatCost(snap.session.costUsd)}${c.reset}`);
+    parts.push(`session ${c.bold}${formatWindowCost(snap.session)}${c.reset}`);
   }
-  parts.push(`today ${c.bold}${formatCost(snap.today.costUsd)}${c.reset}`);
+  parts.push(`today ${c.bold}${formatWindowCost(snap.today)}${c.reset}`);
   parts.push(`${c.dim}${formatTokens(totalTokens(snap.today))} tok${c.reset}`);
 
   if (snap.today.primaryModel) {
@@ -39,6 +39,16 @@ export function formatSnapshot(snap: AgentSnapshot, opts: FormatOptions = {}): s
   return parts.length === 0
     ? prefix
     : `${prefix} ${parts.join(` ${c.dim}·${c.reset} `)}`;
+}
+
+/** Cost display for a window. Shows `$?` or `$X.XX+?` when pricing is missing. */
+export function formatWindowCost(w: UsageWindow): string {
+  const tokens = totalTokens(w);
+  if (w.unknownPricing && tokens > 0) {
+    if (w.costUsd > 0) return `${formatCost(w.costUsd)}+?`;
+    return '$?';
+  }
+  return formatCost(w.costUsd);
 }
 
 export function formatCost(usd: number): string {

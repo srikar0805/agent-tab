@@ -128,7 +128,9 @@ export class ClaudeProvider implements Provider {
       sessionWindow.cacheReadTokens = sessionAcc.cacheRead ?? 0;
       sessionWindow.cacheWriteTokens = sessionAcc.cacheWrite ?? 0;
       sessionWindow.primaryModel = sessionModel;
-      sessionWindow.costUsd = costFor(pricing, sessionModel ?? 'unknown', sessionAcc);
+      const r = costFor(pricing, sessionModel ?? 'unknown', sessionAcc);
+      sessionWindow.costUsd = r.cost;
+      sessionWindow.unknownPricing = !r.known;
       snapshot.session = sessionWindow;
     }
     return snapshot;
@@ -171,7 +173,9 @@ function aggregateWindow(
     win.outputTokens += t.output;
     win.cacheReadTokens += t.cacheRead ?? 0;
     win.cacheWriteTokens += t.cacheWrite ?? 0;
-    win.costUsd += costFor(pricing, model, t);
+    const r = costFor(pricing, model, t);
+    win.costUsd += r.cost;
+    if (!r.known) win.unknownPricing = true;
     const modelTotal = t.input + t.output + (t.cacheRead ?? 0) + (t.cacheWrite ?? 0);
     if (modelTotal > topTokens) {
       topTokens = modelTotal;

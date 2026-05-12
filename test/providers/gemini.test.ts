@@ -7,17 +7,22 @@ import { _resetPricingCache } from '../../src/pricing.js';
 
 let tmp: string;
 let prevGeminiHome: string | undefined;
+let prevCacheDir: string | undefined;
 
 beforeEach(async () => {
   tmp = await mkdtemp(join(tmpdir(), 'agent-tab-gemini-'));
   prevGeminiHome = process.env.GEMINI_HOME;
+  prevCacheDir = process.env.AGENT_TAB_CACHE_DIR;
   process.env.GEMINI_HOME = join(tmp, '.gemini');
+  process.env.AGENT_TAB_CACHE_DIR = join(tmp, '.cache');
   _resetPricingCache();
 });
 
 afterEach(async () => {
   if (prevGeminiHome === undefined) delete process.env.GEMINI_HOME;
   else process.env.GEMINI_HOME = prevGeminiHome;
+  if (prevCacheDir === undefined) delete process.env.AGENT_TAB_CACHE_DIR;
+  else process.env.AGENT_TAB_CACHE_DIR = prevCacheDir;
   await rm(tmp, { recursive: true, force: true });
 });
 

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
+import { spawn } from 'node:child_process';
 import { readConfig, writeConfig, VALID_AGENTS } from './config.js';
 import { getProvider } from './providers/index.js';
 import { isAgentName, type AgentName, type StatusContext } from './providers/types.js';
 import { formatSnapshot } from './format.js';
+import { cacheAgeMs, fetchAndCache, readCache } from './modelsDev.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
+
+const STALE_CACHE_MS = 24 * 3600 * 1000;
 
 const USAGE = `agent-tab — token usage / cost across Claude Code, Codex CLI, Gemini CLI
 
@@ -12,8 +16,15 @@ Usage:
   agent-tab [status]                Print active agent's usage (reads stdin if piped)
   agent-tab use <claude|codex|gemini>   Set the active agent
   agent-tab show                    Print the active agent
+  agent-tab update-pricing          Fetch latest pricing from models.dev
   agent-tab --help                  This message
   agent-tab --version               Print version
+
+Flags for status:
+  --provider=<agent>                One-shot agent override
+  --no-color / --color              Force color setting
+  --offline                         Don't trigger background pricing refresh
+                                    (also: AGENT_TAB_OFFLINE=1)
 
 Wire into Claude Code's statusLine in ~/.claude/settings.json:
   "statusLine": { "type": "command", "command": "agent-tab" }
@@ -39,6 +50,9 @@ async function main(): Promise<number> {
   if (cmd === 'show') {
     return runShow();
   }
+  if (cmd === 'update-pricing') {
+    return runUpdatePricing();
+  }
   if (!cmd || cmd === 'status' || cmd.startsWith('-')) {
     return runStatus(args.slice(cmd === 'status' ? 1 : 0));
   }
@@ -50,9 +64,11 @@ async function main(): Promise<number> {
 async function runStatus(args: string[]): Promise<number> {
   let provider: AgentName | null = null;
   let color: boolean | undefined;
+  let offline = process.env.AGENT_TAB_OFFLINE === '1';
   for (const a of args) {
     if (a === '--no-color') color = false;
     else if (a === '--color') color = true;
+    else if (a === '--offline') offline = true;
     else if (a.startsWith('--provider=')) {
       const v = a.slice('--provider='.length);
       if (isAgentName(v)) provider = v;
@@ -70,6 +86,10 @@ async function runStatus(args: string[]): Promise<number> {
 
   const ctx = await readStdinContext();
 
+  if (!offline) {
+    await maybeTriggerBackgroundRefresh();
+  }
+
   try {
     const snap = await getProvider(provider).snapshot(ctx);
     const line = formatSnapshot(snap, { color });
@@ -80,6 +100,41 @@ async function runStatus(args: string[]): Promise<number> {
     const msg = err instanceof Error ? err.message : String(err);
     process.stdout.write(`[${provider}] error: ${msg}\n`);
     return 0;
+  }
+}
+
+async function maybeTriggerBackgroundRefresh(): Promise<void> {
+  try {
+    const cache = await readCache();
+    const stale = !cache || cacheAgeMs(cache) > STALE_CACHE_MS;
+    if (!stale) return;
+    // Fire and forget — don't block the statusLine.
+    const child = spawn(process.execPath, [process.argv[1] ?? '', 'update-pricing'], {
+      detached: true,
+      stdio: 'ignore',
+      env: { ...process.env, AGENT_TAB_BACKGROUND: '1' },
+    });
+    child.unref();
+  } catch {
+    // Never let refresh failure break the status path.
+  }
+}
+
+async function runUpdatePricing(): Promise<number> {
+  const background = process.env.AGENT_TAB_BACKGROUND === '1';
+  try {
+    const catalog = await fetchAndCache();
+    if (!background) {
+      const n = Object.keys(catalog.models).length;
+      process.stdout.write(`updated: ${n} models cached from models.dev\n`);
+    }
+    return 0;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!background) {
+      process.stderr.write(`agent-tab update-pricing: ${msg}\n`);
+    }
+    return 1;
   }
 }
 

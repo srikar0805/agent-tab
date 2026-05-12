@@ -86,11 +86,24 @@ For the active agent's `session` window:
 
 ## Pricing
 
-[`assets/pricing.json`](assets/pricing.json) — `unit: per_million_tokens`, `currency: USD`. Each model entry has `input`, `output`, optionally `cache_read` and `cache_write`, plus an `aliases` array for date-stamped or vendor-prefixed variants (e.g. `anthropic.claude-opus-4-7-v1:0`).
+Pricing has two sources, layered:
 
-Unknown model → cost 0 (silent). A follow-up will switch the display to `$?` when tokens > 0 but the cost is zero due to missing pricing, so the gap is visible to the user instead of being indistinguishable from an idle day.
+1. **[models.dev](https://models.dev) cache** at `$XDG_CACHE_HOME/agent-tab/models.json` (defaulting to `~/.cache/agent-tab/`). Authoritative when present. Refreshed in the background via a detached child process when the cache is missing or older than 24 hours; the status path never blocks on the network. Force a synchronous fetch with `agent-tab update-pricing`.
+2. **Bundled fallback** at [`assets/pricing.json`](assets/pricing.json). Same schema as before — `unit: per_million_tokens`, `currency: USD`, with optional `aliases` and `free_models` glob patterns (`ollama:*`, `llamacpp:*`). Used when the cache is absent.
 
-Free-model glob patterns (`ollama:*`, `llamacpp:*`) match unconditionally and return zero rates.
+Lookup order for a given model name:
+
+1. Exact match in the cache.
+2. Cache lookup with date-suffix (`-20260101`) stripped, then with any trailing `-suffix` stripped.
+3. Exact match in bundled.
+4. Bundled alias match.
+5. Bundled free-model glob.
+
+A miss returns `{ cost: 0, known: false }` and bubbles `unknownPricing: true` up to the `UsageWindow`, which causes the formatter to render `$?` (or `$X.XX+?` for partial-unknown windows) instead of a misleading `$0.00`.
+
+Why this design: codexbar (https://github.com/steipete/codexbar) demonstrated the value of an external community-maintained catalog over a hand-maintained table. models.dev exposes a single JSON document keyed by provider then model id, with a `cost` block whose fields (`input`, `output`, `cache_read`, `cache_write`, per million tokens) match our schema 1:1. Switching to it removed the need to PR new model pricing into the repo every time OpenAI / Anthropic / Google ships a model.
+
+Privacy: the fetch is one outbound HTTP GET to `https://models.dev/api.json` per refresh. No usage data leaves the machine. The fetch is disabled by `--offline` or `AGENT_TAB_OFFLINE=1`.
 
 ## Non-goals
 

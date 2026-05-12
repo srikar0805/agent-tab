@@ -8,17 +8,22 @@ import { _resetPricingCache } from '../../src/pricing.js';
 
 let tmp: string;
 let prevHome: string | undefined;
+let prevCacheDir: string | undefined;
 
 beforeEach(async () => {
   tmp = await mkdtemp(join(tmpdir(), 'agent-tab-codex-'));
   prevHome = process.env.CODEX_HOME;
+  prevCacheDir = process.env.AGENT_TAB_CACHE_DIR;
   process.env.CODEX_HOME = tmp;
+  process.env.AGENT_TAB_CACHE_DIR = join(tmp, '.cache');
   _resetPricingCache();
 });
 
 afterEach(async () => {
   if (prevHome === undefined) delete process.env.CODEX_HOME;
   else process.env.CODEX_HOME = prevHome;
+  if (prevCacheDir === undefined) delete process.env.AGENT_TAB_CACHE_DIR;
+  else process.env.AGENT_TAB_CACHE_DIR = prevCacheDir;
   await rm(tmp, { recursive: true, force: true });
 });
 
