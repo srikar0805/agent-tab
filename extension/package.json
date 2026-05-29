@@ -1,0 +1,113 @@
+{
+  "name": "agent-tab-chat",
+  "displayName": "Agent Tab Chat",
+  "description": "Multi-provider LLM chat with live context + budget meters, built on agent-tab.",
+  "version": "0.1.0",
+  "publisher": "srikar0805",
+  "license": "MIT",
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["AI", "Chat", "Other"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agentTabChat",
+          "title": "Agent Tab",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agentTabChat": [
+        {
+          "type": "webview",
+          "id": "agentTabChat.view",
+          "name": "Chat"
+        }
+      ]
+    },
+    "commands": [
+      { "command": "agentTabChat.open", "title": "Agent Tab: Open Chat", "category": "Agent Tab" },
+      { "command": "agentTabChat.setApiKey", "title": "Agent Tab: Set API Key for Provider...", "category": "Agent Tab" },
+      { "command": "agentTabChat.clearApiKey", "title": "Agent Tab: Clear API Key for Provider...", "category": "Agent Tab" },
+      { "command": "agentTabChat.resetBudget", "title": "Agent Tab: Reset Budget Counters", "category": "Agent Tab" },
+      { "command": "agentTabChat.newConversation", "title": "Agent Tab: New Conversation", "category": "Agent Tab" },
+      { "command": "agentTabChat.setupLocalModel", "title": "Agent Tab: Set Up Local Ollama Model", "category": "Agent Tab" }
+    ],
+    "configuration": {
+      "title": "Agent Tab Chat",
+      "properties": {
+        "agentTab.defaultProvider": {
+          "type": "string",
+          "enum": ["anthropic", "openai", "gemini", "ollama"],
+          "default": "anthropic"
+        },
+        "agentTab.defaultModel": {
+          "type": "string",
+          "default": "claude-sonnet-4-6"
+        },
+        "agentTab.budget.dailyUSD": { "type": "number", "default": 5.0, "minimum": 0 },
+        "agentTab.budget.monthlyUSD": { "type": "number", "default": 50.0, "minimum": 0 },
+        "agentTab.budget.resetTimezone": {
+          "type": "string",
+          "default": "local",
+          "enum": ["local", "UTC"],
+          "description": "Timezone used for daily/monthly budget rollover."
+        },
+        "agentTab.systemPrompt": {
+          "type": "string",
+          "default": "You are a concise, helpful coding assistant."
+        },
+        "agentTab.ollama.baseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434"
+        },
+        "agentTab.ollama.defaultModel": {
+          "type": "string",
+          "default": "llama3.2"
+        },
+        "agentTab.ollama.bootstrapOnStartup": {
+          "type": "boolean",
+          "default": true,
+          "description": "Prompt once on startup to set up a local Ollama model."
+        },
+        "agentTab.ollama.bootstrapModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:1.5b",
+          "description": "Default model suggested during local Ollama setup."
+        },
+        "agentTab.maxOutputTokens": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 64
+        },
+        "agentTab.tokenEstimateMode": {
+          "type": "string",
+          "enum": ["server", "client", "auto"],
+          "default": "auto",
+          "description": "How to estimate tokens for the context meter before sending."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.12.0",
+    "@types/vscode": "^1.95.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.5.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@google/genai": "^2.6.0",
+    "gpt-tokenizer": "^2.9.0",
+    "openai": "^5.0.0"
+  }
+}

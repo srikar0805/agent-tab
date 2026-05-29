@@ -1,0 +1,190 @@
+{
+  "session": {
+    "date": "2026-05-10",
+    "user_email": "srikarreddy0805@gmail.com",
+    "starting_directory": "/Users/srikarreddy/Documents/my-projects/",
+    "topic": "Building a unified usage/cost tracker for AI coding agents (Claude Code, Codex, Gemini, Copilot, Cursor, custom)",
+    "current_outcome": "User pivoted from a full VSCode extension (coding-agent-monitor) to a focused Node CLI (agent-tab) that wires into Claude Code's statusLine. Pivot happened via direct edits to package.json, tsconfig.json, and LICENSE.",
+    "project_directory": "/Users/srikarreddy/Documents/my-projects/coding-agent-monitor/",
+    "project_identity_now": "agent-tab (per package.json name field) — directory still named coding-agent-monitor"
+  },
+
+  "initial_request": {
+    "verbatim_summary": "Build a VSCode extension that shows how much of the limit a user has consumed across Claude Code, Codex, etc.; show daily/weekly limits + cost + tokens used; allow switching models; handle different emails per agent.",
+    "constraints_uncovered_during_q_and_a": [
+      "All 6 agents in v1 (Claude Code, Codex CLI, Gemini CLI, Copilot, Cursor, custom)",
+      "Show BOTH plan usage and API token spend",
+      "Data collection: local logs + provider APIs",
+      "Multi-email: one-email-per-provider AND multiple-emails-per-provider both needed",
+      "Quality bar: 'best' — user mentioned wanting to grant to companies or create a startup"
+    ]
+  },
+
+  "feasibility_findings_per_provider": {
+    "claude_code": { "tokens": "yes via ~/.claude/projects/**/*.jsonl", "cost": "derived from local pricing table", "plan_quota_api": "no" },
+    "codex_cli": { "tokens": "yes via ~/.codex/sessions/", "cost": "derived; OpenAI Usage API for API-key users", "plan_quota_api": "partial" },
+    "gemini_cli": { "tokens": "yes via ~/.gemini/", "cost": "derived", "plan_quota_api": "no" },
+    "copilot": { "tokens": "no raw tokens — premium-request count only via GitHub billing API", "cost": "flat subscription", "plan_quota_api": "yes" },
+    "cursor": { "tokens": "undocumented local SQLite, fragile", "cost": "n/a", "plan_quota_api": "dashboard only", "decision": "hybrid stub + experimental SQLite read with schema fingerprinting" },
+    "custom_agents": { "approach": "manifest-based parser config + (gated) TS plugin" },
+    "mcp_servers": {
+      "flow_a": "tool-use tokens already captured in host agent's JSONL — surface as a 'by MCP server' pivot",
+      "flow_b": "MCP servers making their own LLM calls — registered via custom-agent manifest"
+    }
+  },
+
+  "design_decisions_locked_in_vscode_extension_path": {
+    "doc": "DESIGN.md (still on disk at project root, ~22kb, 18 sections + edge-case section)",
+    "storage": "better-sqlite3 (native) with @vscode/electron-rebuild, WAL mode, migrations table from day one",
+    "webview_stack": "React 18 + Vite + Tailwind + shadcn/ui + recharts + lucide-react",
+    "host_bundler": "esbuild (Node20, CJS, external: vscode + better-sqlite3)",
+    "data_model_core_tables": ["events", "profiles", "collector_state", "plan_quotas", "collector_issues", "schema_migrations"],
+    "dedupe_strategy": "INSERT OR IGNORE keyed on hash(provider, profile_id, session_id, message_index)",
+    "multi_machine_paths": [
+      "sync the agent data dirs (recommended)",
+      "Export/Import JSON commands (manual)",
+      "Sync Hub via user-owned URL (deferred to v2)"
+    ],
+    "forbidden": "Putting SQLite store under a sync root — detect on activation and refuse to start",
+    "error_ux": "Issues tab in sidebar + status-bar dot when unresolved_issues > 0 (no toasts)",
+    "agent_invocation_v1": "Path A — launch agent CLI in a labeled terminal under chosen profile. No embedded chat in v1.",
+    "graphify_integration_v1": "Path G1 — sidecar; auto-inject MCP config per launched agent; sidebar 'Graph Context' card; report graph-query count, NOT a fabricated $-saved number",
+    "deferred_to_v2": ["embedded chat in webview", "self-hosted Sync Hub", "graphify reimplementation"],
+    "edge_cases_codified_in_design": [
+      "TZ + DST for today/week/month boundary",
+      "Multiple VSCode windows sharing globalStorage (WAL mode + .collector.lock)",
+      "VSCode Remote (SSH/WSL/devcontainer)",
+      "Bedrock/Vertex/proxy alias mapping",
+      "Local models (Ollama) free=true flag",
+      "Unknown models cost=null",
+      "Mid-period pricing changes never recosted automatically",
+      "Schema migration up-only with downgrade refusal",
+      "Stream parse JSONL files >50MB",
+      "Workspace trust gates TS plugins",
+      "Sub-cent cost formatting",
+      "Anonymous / no-credential sessions",
+      "Clock skew on multi-machine sync"
+    ]
+  },
+
+  "scaffold_work_completed_before_pivot": {
+    "files_written": [
+      "DESIGN.md",
+      "package.json (now replaced by user)",
+      "tsconfig.json (now simplified by user)",
+      "tsconfig.host.json",
+      "esbuild.config.mjs",
+      "vite.config.ts",
+      "tailwind.config.js",
+      "postcss.config.js",
+      ".eslintrc.cjs",
+      ".prettierrc",
+      ".gitignore",
+      ".vscodeignore",
+      "LICENSE (user updated copyright to 'Srikar')",
+      "src/extension.ts",
+      "src/platform/paths.ts",
+      "src/store/db.ts",
+      "src/store/migrations.ts",
+      "src/store/queries.ts",
+      "src/collectors/types.ts",
+      "src/collectors/manager.ts",
+      "src/ui/statusBar.ts",
+      "src/ui/sidebarProvider.ts",
+      "src/commands/index.ts",
+      "webview-src/index.html",
+      "webview-src/index.css",
+      "webview-src/main.tsx",
+      "webview-src/App.tsx",
+      "webview-src/tsconfig.json",
+      "webview-src/lib/vscode.ts",
+      "webview-src/lib/utils.ts",
+      "webview-src/components/Button.tsx",
+      "webview-src/components/Card.tsx",
+      "webview-src/components/Header.tsx",
+      "webview-src/components/TotalsBar.tsx",
+      "webview-src/components/EmptyState.tsx"
+    ],
+    "verified_in_environment": [
+      "npm run rebuild succeeded (better-sqlite3 against Electron 30 / VSCode 1.119)",
+      "VSCode 1.119.0 arm64 detected on disk at /Applications/Visual Studio Code.app/"
+    ],
+    "files_NOT_yet_written_when_pivot_happened": [
+      "assets/pricing.json",
+      "assets/activity-bar-icon.svg",
+      "assets/icon.png",
+      ".vscode/launch.json (F5 config)",
+      ".github/workflows/ci.yml",
+      "README.md",
+      "test/ vitest scaffolding"
+    ]
+  },
+
+  "user_pivot_to_agent_tab": {
+    "what_changed": {
+      "package_json": "Renamed to 'agent-tab' v0.2.0. Removed all VSCode/extension/React/SQLite deps. Now a Node CLI built with plain tsc. Only deps: typescript, @types/node, vitest. Bin: agent-tab → dist/cli.js.",
+      "tsconfig_json": "Stripped to a single-project NodeNext setup (no composite, no webview-src references)",
+      "license": "Copyright holder updated to 'Srikar'",
+      "tagline": "CLI that prints today's token usage and cost across Claude Code, Codex CLI, and Gemini CLI. Designed to wire into Claude Code's statusLine so the active agent's tab shows above your prompt.",
+      "scope_reduction": "From 6 providers + sidebar + status bar + SQLite + graphify wiring → 3 providers (Claude Code, Codex, Gemini), CLI only, no GUI, no DB"
+    },
+    "files_now_irrelevant_to_agent_tab": [
+      "esbuild.config.mjs (no extension bundle needed)",
+      "vite.config.ts (no webview)",
+      "tailwind.config.js (no webview)",
+      "postcss.config.js (no webview)",
+      ".vscodeignore (no VSIX)",
+      "src/extension.ts, src/ui/*, src/commands/*, src/collectors/manager.ts, src/store/* (all VSCode-specific)",
+      "webview-src/ entire tree",
+      "node_modules/better-sqlite3, react, vite, tailwind, etc."
+    ],
+    "files_potentially_reusable": [
+      "src/platform/paths.ts (path resolution for Claude/Codex/Gemini data dirs — agent-tab needs this)",
+      "src/collectors/types.ts (UsageEvent shape — agent-tab needs similar)",
+      "DESIGN.md (reference for what to build later if agent-tab grows)"
+    ]
+  },
+
+  "implied_next_steps_for_agent_tab": {
+    "needs_to_be_built": [
+      "src/cli.ts — entry point (Bin target is dist/cli.js)",
+      "Per-provider parsers for Claude Code / Codex / Gemini local logs",
+      "Pricing table (assets/pricing.json) + cost computation",
+      "Output formats: human-readable line, JSON (for statusLine wiring), maybe ANSI-colored",
+      "README.md with installation + Claude Code statusLine wiring instructions"
+    ],
+    "claude_code_statusline_integration": {
+      "mechanism": "Claude Code supports a statusLine config that runs a command and shows its stdout above the prompt. agent-tab should print a short, terminal-friendly line like '🟢 claude $1.20 · codex $0.03 · today'.",
+      "config_location": "~/.claude.json — statusLine.command",
+      "performance_constraint": "Runs on every prompt — must be FAST (<50ms ideal, <200ms max)"
+    },
+    "open_design_questions_for_agent_tab": [
+      "Output format(s)? Plain text only, or also JSON/--format=json for scripting?",
+      "Caching strategy? Re-parse every run is fine for small log volumes but expensive for users with months of data — add a small cache file?",
+      "Include cost ceiling indicators inline (e.g. '🟡 75% week')?",
+      "Should agent-tab support arguments like 'agent-tab today' / 'agent-tab week' / 'agent-tab --json'?"
+    ]
+  },
+
+  "outstanding_open_questions_carried_over_from_design_phase": [
+    "Any user stories missed (open in DESIGN.md §18)"
+  ],
+
+  "conversation_meta": {
+    "rounds_with_user": [
+      "Round 1: scope clarification — agents in v1, limit type, data source, multi-account",
+      "Round 2: project name pick (coding-agent-monitor)",
+      "Round 3: open questions — webview framework, SQLite, Cursor, MCP",
+      "Round 4: edge case — what about Windows/Linux for iCloud-style sync",
+      "Round 5: edge cases brainstorm + agent invocation/graphify scope expansion",
+      "Round 6: locked in A + G1; went to scaffold",
+      "Round 7: user asked 'where is webview rendered, is it a browser' — clarified VSCode panel",
+      "Round 8: user pivoted package.json/tsconfig/license to agent-tab"
+    ],
+    "feedback_for_future_sessions": [
+      "When user says 'all agents day 1' / 'do whichever is best' / 'create a startup', they may be optimistically opening scope rather than committing to building all of it. Push back harder on scope earlier and offer a 'thin first slice' option more aggressively.",
+      "User responds well to explicit scope/effort tradeoff tables and AskUserQuestion prompts with named recommendations.",
+      "User pivots quickly when a project feels too heavy — keep the design doc as a north star but always have a shippable v0.1 inside it."
+    ]
+  }
+}

@@ -1,0 +1,8 @@
+src/**
+test/**
+.vscode/**
+.gitignore
+tsconfig.json
+esbuild.config.mjs
+node_modules/**
+!node_modules/.package-lock.json
